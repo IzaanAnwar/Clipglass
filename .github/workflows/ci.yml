@@ -1,0 +1,36 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - name: Validate scripts and metadata
+        run: |
+          bash -n scripts/*.sh
+          plutil -lint Resources/Info.plist
+          git diff --check
+      - name: Test with coverage
+        run: ./scripts/test.sh
+      - name: Build universal app
+        run: ARCHS='arm64 x86_64' ./scripts/build-app.sh
+      - name: Package and verify DMG
+        run: ./scripts/package-dmg.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Clipglass-preview
+          path: dist/*.dmg*
+          retention-days: 7

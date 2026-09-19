@@ -1,0 +1,17 @@
+name: Bug report
+description: Report a reproducible problem
+title: 'Bug: '
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Clipglass and macOS versions
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps, expected behavior, and actual behavior
+      description: Remove personal clipboard contents from screenshots and logs.
+    validations:
+      required: true

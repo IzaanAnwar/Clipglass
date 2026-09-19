@@ -1,0 +1,73 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "${RELEASE_TAG#v}" = "$(cat VERSION)"
+      - run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - run: ./scripts/test.sh
+      - name: Configure optional Developer ID signing
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          DEVELOPER_ID: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./scripts/configure-signing.sh
+      - name: Build universal app and DMG
+        run: |
+          ARCHS='arm64 x86_64' ./scripts/build-app.sh
+          ./scripts/package-dmg.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-dmg
+          path: dist/*.dmg*
+          if-no-files-found: error
+      - name: Remove temporary signing keychain
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/clipglass-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/clipglass-signing.keychain-db"
+          fi
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dmg
+          path: dist
+      - name: Publish versioned assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          IS_SIGNED: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
+        run: |
+          if [[ "$IS_SIGNED" == true ]]; then
+            printf 'Universal macOS app for macOS 26+. Developer ID signed and notarized.\n' > notes.md
+          else
+            printf 'Universal macOS app for macOS 26+. Community build: ad-hoc signed, not Apple-notarized. macOS may block opening a downloaded build.\n' > notes.md
+          fi
+          printf '\nDownload the DMG, drag Clipglass to Applications, and enable Accessibility in Settings for direct paste. SHA-256 checksums are attached.\n' >> notes.md
+          gh release create "$RELEASE_TAG" dist/* --verify-tag --title "Clipglass $RELEASE_TAG" --notes-file notes.md --generate-notes

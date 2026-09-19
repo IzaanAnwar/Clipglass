@@ -4,7 +4,7 @@ import ClipboardCore
 import ClipboardMac
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings = AppSettings(defaults: ProcessInfo.processInfo.arguments.contains("--demo") ? UserDefaults(suiteName: "Clipglass.Demo")! : .standard)
     private lazy var store = ClipboardStore(limit: settings.historyLimit)
     private lazy var model = HistoryModel(store: store, settings: settings)
@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: ClipboardPanel?
     private var keyMonitor: Any?
+    private var outsideClickMonitor: Any?
+    private var appSwitchObserver: NSObjectProtocol?
     private var previousApp: NSRunningApplication?
     private var destination: PasteDestination?
     private var pasteTask: Task<Void, Never>?
@@ -70,15 +72,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.showsSettings = false
         let window = ClipboardPanel(model: model)
         panel = window
+        window.delegate = self
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.dismissPanel(restoreFocus: false)
+        }
+        appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dismissPanel(restoreFocus: false) }
+        }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.panel?.isKeyWindow == true else { return event }
             return self.model.handle(event) ? nil : event
         }
         window.makeKeyAndOrderFront(nil)
     }
+    func windowDidResignKey(_ notification: Notification) {
+        dismissPanel(restoreFocus: false)
+    }
     private func dismissPanel(restoreFocus: Bool = true) {
+        if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor); self.outsideClickMonitor = nil }
+        if let appSwitchObserver { NSWorkspace.shared.notificationCenter.removeObserver(appSwitchObserver); self.appSwitchObserver = nil }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         model.isRecordingShortcut = false
+        panel?.delegate = nil
         panel?.orderOut(nil)
         panel?.contentView = nil
         panel = nil

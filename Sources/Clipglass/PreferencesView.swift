@@ -27,11 +27,15 @@ struct PreferencesView: View {
                 HStack {
                     Label(model.hasPermission ? "Accessibility enabled" : "Accessibility permission needed", systemImage: model.hasPermission ? "checkmark.circle" : "hand.raised")
                     Spacer()
-                    Button(model.hasPermission ? "Check again" : "Enable…") {
-                        PasteService.requestPermission()
+                    Button("Open System Settings…") {
+                        if !PasteService.requestPermission() {
+                            model.store.notice = "Could not open System Settings. Open Privacy & Security manually and enable Clipglass in the accessibility permissions list."
+                        }
                         model.hasPermission = PasteService.hasPermission
                     }
                 }
+                Text("Turn on Clipglass in the permissions list. If it is missing, use + to add Clipglass from Applications. Then reopen Clipglass to refresh its permission status.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Pastes only into an editable field. Secure fields, read-only views, and unsupported apps are left alone.")
                     .font(.caption).foregroundStyle(.secondary)
             }

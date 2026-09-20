@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Open macOS permission settings explicitly when enabling direct paste, even if the system prompt was previously dismissed.
+- Add setup instructions and a fallback when Settings cannot open.
+
 ## 0.2.0
 
 - Search-first macOS panel with compact history rows, type filters, and previews.

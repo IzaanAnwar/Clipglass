@@ -102,18 +102,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if restoreFocus { previousApp?.activate() }
     }
     private func select(_ clip: Clip, copyOnly: Bool) {
-        guard !model.isBusy else { return }
+        guard !model.isBusy, store.copy(clip) else { return }
         if copyOnly || !settings.autoPaste {
-            if store.copy(clip) { dismissPanel() }
+            dismissPanel()
             return
         }
         guard PasteService.hasPermission else {
-            model.showsSettings = true
-            store.notice = "Enable Accessibility to paste directly, or use ⌘Return to copy only."
+            store.notice = "Copied. Press Esc, then ⌘V to paste. Enable Accessibility in Settings for direct paste."
             return
         }
         guard let destination, destination.isStillEditable() else {
-            store.notice = "Nothing pasted. Focus an editable text field, then reopen Clipglass."
+            store.notice = "Copied. Press Esc, then ⌘V in a text field to paste."
             return
         }
         model.isBusy = true
@@ -121,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         pasteTask = Task { [weak self] in
             guard let self else { return }
             let pasted = await PasteService.paste(to: destination) { self.store.copy(clip) }
-            if !pasted { store.notice = "Nothing pasted because the destination or focus changed." }
+            if !pasted { store.notice = "Copied. Automatic paste stopped because focus changed. Press ⌘V to paste." }
             model.isBusy = false
         }
     }

@@ -38,6 +38,22 @@ struct ClipboardTests {
             #expect(ClipboardCodec.read(from: board, byteLimit: 4096) == nil)
         }
     }
+    @Test func copyingOlderItemReplacesClipboardWithoutReorderingHistory() throws {
+        try withPasteboard { board in
+            let store = ClipboardStore(pasteboard: board)
+            for value in ["third", "second", "first"] {
+                board.clearContents()
+                board.setString(value, forType: .string)
+                store.captureClipboard()
+            }
+            let originalOrder = store.history.clips.map(\.id)
+            let third = try #require(store.history.clips.last)
+            #expect(store.copy(third))
+            #expect(board.string(forType: .string) == "third")
+            store.captureClipboard()
+            #expect(store.history.clips.map(\.id) == originalOrder)
+        }
+    }
     @Test func pauseResumeAndSelfCopyDoNotCreateHistoryEntries() throws {
         try withPasteboard { board in
             let store = ClipboardStore(pasteboard: board)
